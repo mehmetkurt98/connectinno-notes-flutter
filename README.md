@@ -2,7 +2,7 @@
 
 
 
-## Uygulama Ekran Görüntüleri
+## Application Screenshots
    
 <table align="center">
   <tr>
