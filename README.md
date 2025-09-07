@@ -1,5 +1,37 @@
 
 
+
+
+## Uygulama Ekran Görüntüleri
+   
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="assets/screenshots/login.png" alt="Login Screen" width="200"/><br/>
+      <b>Giriş</b>
+    </td>
+    <td align="center">
+      <img src="assets/screenshots/register.png" alt="Register Screen" width="200"/><br/>
+      <b>Kayıt Ol</b>
+    </td>
+    <td align="center">
+      <img src="assets/screenshots/home.png" alt="Home Screen" width="200"/><br/>
+      <b>Fotoğraf Ekle</b>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/screenshots/not.png" alt="Add Note" width="200"/><br/>
+      <b>Profil</b>
+    </td>
+    <td align="center">
+      <img src="assets/screenshots/summary.png" alt="AI Summary" width="200"/><br/>
+      <b>Ana Sayfa</b>
+    </td>
+  </tr>
+</table>
+
+
 # Connectinno Notes - Flutter Case Study  - Mehmet Kurt Flutter Dev.
 
 
