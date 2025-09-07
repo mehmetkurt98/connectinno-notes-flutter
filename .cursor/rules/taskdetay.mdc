@@ -1,0 +1,389 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Connectinno Case — Temiz Mimarî & Cubit Dokümantasyonu
+
+Bu doküman, **Connectinno - Flutter Developer Case** için gereken tüm mimari kararları, klasör yapılarını, core feature tanımlarını, SOLID prensipleriyle uyumu ve uygulama / backend tarafındaki detaylı iş akışlarını içermektedir. Bu metni direkt Cursor rules dosyana yapıştırabilir veya README / docs klasörüne koyabilirsin.
+
+> Amaç: Değerlendiricilerin gözünde "production-grade", okunabilir, test edilebilir ve sürdürülebilir bir çözüm sunmak.
+
+---
+
+## Özet (High-level)
+
+* **Frontend:** Flutter (Dart) — Cubit (flutter\_bloc / hydrated\_bloc), Hive (local cache), Dio (HTTP), Firebase Auth (Email/Password)
+* **Backend:** FastAPI — Firebase Admin SDK ile token doğrulama ve Firestore (veya başka DB) ile veri yönetimi
+* **Mimari:** Clean Architecture (Presentation / Domain / Data), Dependency Injection (get\_it), Repository Pattern, Data Source (remote/local)
+* **Offline-first:** Local storage (Hive) + pending operations queue + otomatik sync when online
+* **Değerlendirme hedefleri:** Kod kalitesi, ayrım (layering), offline sync doğruluğu, API güvenliği, UX, dokümantasyon
+
+---
+
+## Varsayımlar
+
+1. Authentication için Firebase Auth kullanılacak (Email/Password).
+2. Not verileri Firestore'da tutulacak (veya istenirse PostgreSQL ile de çalışılabilir; FastAPI soyutlaması sayesinde değiştirilebilir).
+3. Mobil uygulama backend'e `Authorization: Bearer <idToken>` gönderir; FastAPI bu token'ı Firebase Admin SDK ile doğrular.
+4. Proje Cubit ile yazılacak (HydratedCubit kullanımı opsiyoneldir ama cache için faydalıdır).
+
+---
+
+# Mimari Detayları
+
+## Neden Clean Architecture?
+
+* **Bağımsızlık:** UI, iş mantığı ve veri katmanları birbirinden ayrılır. Test edilebilirlik artar.
+* **Taşınabilirlik:** DB ya da servis değişse frontend minimum değişimle çalışmaya devam eder.
+* **Bakım & Ölçek:** Kodun sorumlulukları net olduğunda yeni özellik eklemek ve hata ayıklamak kolaylaşır.
+
+## Katmanlar (Mapping)
+
+* **Presentation (UI)**: Widgets, Screens, Cubit'ler, ViewModels (sadece UI state). Sorumluluk: UI güncellemeleri ve kullanıcı etkileşimleri.
+* **Domain**: UseCases (interactors), Entities (core modeller). Sorumluluk: İş kuralları, validation, orchestration.
+* **Data**: Repositories, DataSources (Remote & Local), DTO/Model mapper. Sorumluluk: Veri alma/verme, cache yönetimi.
+* **Infra / External**: Network client (Dio), Firebase Admin (backend), Firestore, Hive.
+
+---
+
+# Teknoloji & Paketler (Öneri)
+
+### Flutter (frontend)
+
+* `flutter_bloc` / `hydrated_bloc`
+* `equatable`
+* `hive` + `hive_flutter`
+* `dio` + `pretty_dio_logger`
+* `connectivity_plus`
+* `firebase_core`, `firebase_auth`
+* `get_it` (DI) veya `riverpod` (istemiş olsanız da get\_it yeterli)
+* `freezed`, `json_serializable` (model generation)
+
+### Backend (FastAPI)
+
+* `fastapi`, `uvicorn`
+* `firebase-admin` (token doğrulama)
+* `google-cloud-firestore` (veya `sqlalchemy` + postgres)
+* `pydantic` (schema validation)
+* `python-dotenv`
+
+---
+
+# Flutter — Önerilen Klasör Yapısı (Clean + Cubit)
+
+```
+lib/
+├─ main.dart
+├─ src/
+│  ├─ core/
+│  │  ├─ di/                 # get_it registration
+│  │  ├─ error/              # custom exceptions, failure models
+│  │  ├─ network/            # dio client, interceptors (AuthTokenInterceptor)
+│  │  └─ utils/              # date formatter, validators
+│  ├─ features/              # feature bazlı yapı (notes, auth)
+│  │  ├─ auth/
+│  │  │  ├─ presentation/
+│  │  │  │  ├─ cubit/
+│  │  │  │  └─ pages/
+│  │  │  ├─ domain/
+│  │  │  │  └─ usecases/
+│  │  │  └─ data/
+│  │  │     ├─ models/
+│  │  │     ├─ datasources/
+│  │  │     └─ repositories/
+│  │  └─ notes/
+│  │     ├─ presentation/
+│  │     │  ├─ cubit/
+│  │     │  └─ pages/
+│  │     ├─ domain/
+│  │     │  └─ usecases/
+│  │     └─ data/
+│  │        ├─ models/
+│  │        ├─ datasources/
+│  │        │  ├─ notes_remote_data_source.dart
+│  │        │  └─ notes_local_data_source.dart
+│  │        └─ repositories/
+│  └─ app.dart
+└─ pubspec.yaml
+```
+
+### Açıklamalar
+
+* `core/di`: get\_it ile repository, cubit ve client register edilir.
+* `features/*`: her feature kendi katmanlarına sahip (presentation/domain/data).
+* `datasources`: remote ve local veri kaynakları burada tutulur.
+* `models` vs `entities`: Entities domain seviyesinde saf (business logic için), models data katmanına özgü (JSON, hive adapter). Mapper'lar model <-> entity dönüşümlerini yapar.
+
+---
+
+# Backend (FastAPI) — Önerilen Klasör Yapısı
+
+```
+notes-backend/
+├─ app/
+│  ├─ main.py
+│  ├─ deps.py            # auth dependency (verify token)
+│  ├─ firebase.py        # firebase admin init, firestore client
+│  ├─ schemas.py         # pydantic modeller
+│  ├─ repository.py      # firestore CRUD wrapper
+│  ├─ routes/
+│  │  └─ notes.py
+│  └─ utils/
+│     └─ errors.py
+├─ .env
+├─ requirements.txt
+└─ serviceAccountKey.json  # gitignore'e ekle
+```
+
+---
+
+# Core Feature Açıklamaları (Detaylı)
+
+## Auth
+
+* **Frontend:** Firebase Auth (email/password). `AuthCubit` user state (unauthenticated, authenticated, loading, error).
+* **Backend:** Her istekte `Authorization: Bearer <idToken>` beklenir. FastAPI `get_current_user` dependency ile `firebase-admin` kullanarak token doğrulanır ve `uid` alınır.
+
+## Notes CRUD
+
+* **Fields:** `id`, `title`, `content`, `created_at`, `updated_at`, `owner_uid`, `dirty`, `deleted` (deleted: soft delete pini için)
+* **Operations:** create, read (list by owner), update, delete
+
+## Offline-first & Sync
+
+* **Local:** Hive'ta `notes` box (ör. Map\<string, NoteModel>), `pending_ops` queue box.
+* **Pending Ops:** FIFO kuyruğu; her eleman `{op: create|update|delete, noteId, payload, updatedAt}`
+* **Sync algoritması (yüksek seviyede):**
+
+  1. Cihaz online olduğunda `sync()` tetiklenir.
+  2. Pending ops kuyruğu baştan sona işlenir: create -> POST, update -> PUT, delete -> DELETE.
+  3. Her başarılı işlem lokal notu temizler (dirty=false) veya siler.
+  4. Uzak veritabanından en son not seti çekilir ve lokal ile birleştirilir (last-write-wins by `updated_at`).
+* **Çatışma çözümü:** `updated_at` karşılaştırması (timestamp daha yeni olana öncelik). Daha sofistike yöntem istenirse "merge" UI gösterilebilir.
+
+---
+
+# Data Layer — Sınıf / Interface Tasarımı (Örnek)
+
+### `NotesRepository` (Domain tarafında interface)
+
+```dart
+abstract class NotesRepository {
+  Future<List<Note>> getAllNotes(String ownerUid);
+  Future<Note> createNote(Note note);
+  Future<Note> updateNote(Note note);
+  Future<void> deleteNote(String noteId);
+  Future<void> syncPending();
+}
+```
+
+### `NotesRemoteDataSource`
+
+* `Future<List<NoteModel>> fetchNotes(String uid)`
+* `Future<NoteModel> createNoteRemote(NoteModel)`
+* `Future<NoteModel> updateNoteRemote(NoteModel)`
+* `Future<void> deleteNoteRemote(String id)`
+
+### `NotesLocalDataSource`
+
+* `Future<List<NoteModel>> getCachedNotes()`
+* `Future<void> cacheNotes(List<NoteModel>)`
+* `Future<void> savePendingOp(PendingOp op)`
+* `Future<List<PendingOp>> getPendingOps()`
+* `Future<void> removePendingOp(String opId)`
+
+---
+
+# Presentation Layer — Cubit Tasarımı
+
+## `AuthCubit`
+
+* States: `AuthInitial`, `AuthLoading`, `AuthAuthenticated(User)`, `AuthUnauthenticated`, `AuthError`.
+* Komutlar: `signUp(email, pwd)`, `signIn(email, pwd)`, `signOut()`
+
+## `NotesCubit`
+
+* State fields: `List<Note> notes`, `bool loading`, `bool syncing`, `String? error`
+* Komutlar: `loadNotes()`, `addNote()`, `editNote()`, `deleteNote()`, `sync()`
+* `NotesCubit` sadece `NotesRepository` ile konuşur — data kaynaklarına doğrudan erişmez (Dependency Inversion).
+
+---
+
+# Örnek Kod Parçacıkları (Kısa)
+
+### Dio Auth Interceptor (Flutter)
+
+```dart
+class AuthTokenInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final token = await user.getIdToken();
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+}
+```
+
+### FastAPI get\_current\_user (basit)
+
+```python
+from fastapi import Header, HTTPException
+from firebase_admin import auth as fb_auth
+
+def get_current_user(authorization: str = Header(...)):
+    try:
+        scheme, token = authorization.split(" ")
+        if scheme.lower() != 'bearer':
+            raise Exception()
+        decoded = fb_auth.verify_id_token(token)
+        return decoded
+    except Exception:
+        raise HTTPException(status_code=401, detail='Invalid or missing token')
+```
+
+---
+
+# Sync Algoritması — Adım Adım (Detaylı)
+
+1. **Local CRUD yapıldığında:**
+
+   * local note güncellenir/eklenir/silinir (UI hemen güncellenir)
+   * note `dirty=true` veya `deleted=true` flag'i set edilir
+   * pending\_ops kuyruğuna bir op (create/update/delete) push edilir
+
+2. **Connectivity dinlenir:** `connectivity_plus` ile online olduğunda `SyncManager.sync()` çağrılır.
+
+3. **Sync Manager**
+
+   * pending\_ops listesini alır
+   * her op için: remote API çağrısı yapılır (Dio), hata yoksa op silinir, local not güncellenir (dirty=false)
+   * hata durumunda retry stratejisi: exponential backoff, max 5 retry
+
+4. **Son olarak** remote'dan tam liste çekilir, `updated_at`'a göre birleştirme yapılır (güncel olan tutulur). Local ve remote tutarlı hale getirilir.
+
+---
+
+# Conflict Çözümü Tavsiyeleri
+
+* Basit ve hızlı: **Last-write-wins** (updated\_at timestamp'ı daha yeni olan kaydı al)
+* Daha kullanıcı-dostu: Çatışma tespit edilirse UI'da `Conflict resolution` dialog göster (kullanıcı seçsin veya merge et)
+* Kritik alanlar için field-level merge stratejisi önerilebilir (ör. content merge algoritması)
+
+---
+
+# Test Stratejisi
+
+## Frontend
+
+* **Unit tests:** Cubit state transitions, usecase logic, utils
+* **Repository tests:** mock remote/local data sources (mocktail veya mockito)
+* **Widget tests:** temel widget'ların görüntülenmesi ve state-binding
+* **Integration tests (opsiyonel):** end-to-end auth + notes akışı (Firebase emulator kullanılabilir)
+
+## Backend
+
+* **Unit tests:** pydantic validation, repository functions (firestore mockable)
+* **Integration tests:** FastAPI test client ile endpoint doğrulamaları (auth mock veya Firebase emulator)
+
+---
+
+# CI / CD (Örnek Github Actions)
+
+* **Frontend workflow:**
+
+  * actions/checkout
+  * setup-java (if needed for some tooling), setup flutter
+  * `flutter pub get`
+  * `flutter analyze`
+  * `flutter test`
+  * build apk / ipa (opsiyonel)
+* **Backend workflow:**
+
+  * checkout
+  * setup python
+  * `pip install -r requirements.txt`
+  * `pytest`
+  * lint (flake8)
+
+---
+
+# Güvenlik & Best Practices
+
+* `serviceAccountKey.json` ve `.env` asla repo'ya commit edilmemeli (gitignore)
+* Production'da Firestore security rules ile ekstra koruma sağla
+* Backend üzerinde `verify_id_token` ile her isteği doğrula
+* CORS yapılandırmasını sadece izin verilen origin'lerle sınırlandır
+* Rate limiting gerekiyorsa backend'e ekle (uvicorn + reverse proxy)
+
+---
+
+# Performans & Ölçekleme Notları
+
+* Not listeleri için pagination (limit + startAfter) kullan
+* Büyük içerikler için Firestore document size limitlerini kontrol et
+* Çok sayıda op varsa `batch` yazmalarını kullan (Firestore batch writes)
+
+---
+
+# UX & UI Önerileri (Hızlı Kabul İçin Önemli)
+
+* Basit ve temiz tasarım: Not liste, detay, edit ekranları
+* Offline banner: "Şu anda çevrimdışısınız — değişiklikler yerel olarak saklanacak"
+* Senkron durumu: küçük bir sync icon / spinner göster
+* Hata mesajları: Kullanıcı için anlamlı ve eylem odaklı mesajlar
+* Undo for Delete: Hemen silme yerine 5–7 sn için geri al seçeneği
+
+---
+
+# README / Deliverable Checklist (Gönderirken)
+
+* Frontend repo linki
+* Backend repo linki
+* .env.example dosyaları
+* Kurulum adımları (ör: python venv, uvicorn komutu, firebase servis hesabı nasıl eklenir)
+* Demo video (Login → Create → Edit → Delete → Offline → Sync gösterisi)
+* Tests & nasıl çalıştırılacağı
+
+---
+
+# Değerlendiriciyi Etkileyecek Ek Notlar (Kısa & Güçlü)
+
+* Kodda `TODO` bırakma — yorumlar açıklayıcı olsun
+* README'de mimari kararlarını kısa gerekçe ile belirt
+* Commit'ler küçük ve anlamlı olsun (feature bazlı)
+* PR açıklamasında offline senkronizasyon mantığını açıkla
+* Eğer zaman varsa küçük bir "AI summary" butonu ekle (notun kısa özeti) — bonus
+
+---
+
+## Hızlı Başlangıç Komutları (Frontend & Backend)
+
+**Backend (örnek)**
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+**Frontend (örnek)**
+
+```bash
+flutter pub get
+flutter run
+```
+
+---
+
+## Son Söz
+
+Bu doküman Connectinno case'i tam puan alacak şekilde hazırlanmıştır. Her bölümde mümkün olduğunca açık sorumluluk ve implementasyon adımlarını verdim. İstersen bu dokümandan tek bir `README.md` ya da `docs/architecture.md` üretip, repo'na ekleyecek şekilde düzenleyebilirim.
+
+Başarılı olmanı istiyorum — istersen şimdi adım adım backend dosyalarını tek tek oluşturmana yardımcı olayım (ben örnek dosyaları sana sağlayayım, sen çalıştır).
+
+C:\Users\Mehmet\AndroidStudioProjects\connectinno_backend  projenin backend dosyaları bu dizinde bulunuyor bunu asla unutma her zaman backend eklentilerini bu dosya dizininde yap 
