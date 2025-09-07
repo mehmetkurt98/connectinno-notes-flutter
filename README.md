@@ -92,13 +92,6 @@ flutter run
 - Add `google-services.json` file to `android/app/` folder
 - Enable Authentication and Firestore in Firebase project
 
-## 🔒 Security Notes
-
-- **Never commit .env files** - They contain sensitive API keys
-- **Firebase API keys** are configured via environment variables
-- **Backend API keys** are stored securely
-- **JWT token verification** is performed on every request
-
 ## 🏗️ Architecture
 
 The project follows Clean Architecture principles:
@@ -167,7 +160,3 @@ The project follows Clean Architecture principles:
 - **Content Suggestions**: AI-powered writing suggestions and auto-completion
 - **Voice-to-Text Integration**: Speech recognition for hands-free note creation
 - **Image Recognition**: Extract text from images and convert to notes
-- **Sentiment Analysis**: Analyze note content for emotional context
-- **Smart Search**: Semantic search across all notes using natural language queries
-- **Auto-Translation**: Translate notes to different languages using AI
-- **Content Generation**: AI-assisted note creation with templates and prompts
