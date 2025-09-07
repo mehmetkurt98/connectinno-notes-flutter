@@ -232,5 +232,3 @@ The project follows Clean Architecture principles:
 - **Webhook Support**: Real-time notifications to external services
 - **RSS Feeds**: Subscribe to and create notes from RSS feeds
 - **Zapier Integration**: Connect with 1000+ apps via Zapier
-
-## 📝 License
