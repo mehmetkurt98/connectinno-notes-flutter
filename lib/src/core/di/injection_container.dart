@@ -1,7 +1,11 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+
+import '../../../firebase_options.dart';
 
 import '../network/dio_client.dart';
 import '../network/network_info.dart';
@@ -23,11 +27,33 @@ final sl = GetIt.instance;
 
 /// Initialize all dependencies
 Future<void> init() async {
-  // Initialize Hive
-  await Hive.initFlutter();
+  // Load environment variables (opsiyonel)
+  try {
+    await dotenv.load(fileName: ".env");
+    print('✅ Environment variables loaded');
+  } catch (e) {
+    print('⚠️ .env dosyası bulunamadı, default değerler kullanılacak');
+  }
 
-  // Debug: Hive başlatıldı
-  print('🗂️ Hive başlatıldı');
+  // Initialize Firebase (kritik - başarısız olursa uygulama çalışamaz)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print('✅ Firebase initialized');
+  } catch (e) {
+    print('❌ Firebase initialization failed: $e');
+    rethrow; // Firebase kritik, uygulama çalışamaz
+  }
+
+  // Initialize Hive (kritik - başarısız olursa uygulama çalışamaz)
+  try {
+    await Hive.initFlutter();
+    print('✅ Hive initialized');
+  } catch (e) {
+    print('❌ Hive initialization failed: $e');
+    rethrow; // Hive kritik, uygulama çalışamaz
+  }
 
   // Register Hive adapters
   Hive.registerAdapter(NoteModelAdapter());
